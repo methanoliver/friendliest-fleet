@@ -35,7 +35,7 @@ for x in sorted(names):
 # Ignore low-scoring pairings.
 too_low = []
 for ship, score in ships.items():
-    if score <= 100:
+    if score <= 50:
         too_low.append(ship)
 for ship in too_low:
     del ships[ship]
