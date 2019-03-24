@@ -1,58 +1,53 @@
 #!/usr/bin/env python3
+"""
+Using the data.pickle prepared by fetch-data.py, compute the Friendliest Fleet
+based on it.
 
-import csv
-from collections import defaultdict
+I recommend you run this as 'nice ./fleet.py' just in case.
+"""
+
 import operator
 import networkx as nx
 import dwave_networkx as dnx
 import neal
+import pickle
 
-ships = defaultdict(int)
-tags = set()
-names = set()
+# The scoring parameter we're using.
+# You can use:
+# 'upvotes_per_day',
+# 'wilson_per_day', -- I'm not sure it makes *sense* to do this to a Wilson score,
+# 'amount_per_day', -- The number of images per day.
+#
+# "per day" means simply "from the earliest posted image in the ship to today."
+SCORE_KEY = 'upvotes_per_day'
 
-with open('Most Satisfactory Fleet - Sheet1.csv', "r") as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        # Avoid duplicates in case any are left in the initial data.
-        taglist = [row['Tag'].strip()] + row['Aliases'].split()
-        if any([x in tags for x in taglist]):
-            tags |= set(taglist)
-            continue
-        tags |= set(taglist)
+# Cutoff value for ships: Ships with fewer total images are not considered
+# for the calculation.
+COUNT_CUTOFF = 50
 
-        char_a = row['Character A'].strip()
-        char_b = row['Character B'].strip()
-        names.add(char_a)
-        names.add(char_b)
-        ships[tuple(sorted([char_a, char_b]))] += int(row['Score'])
+# Number of times to run the optimizer.
+# Only the highest scoring result will be reported.
+LOOPS = 500
 
-# To make it easier to sort out typos.
-print("Distinct names:")
-for x in sorted(names):
-    print(x)
-
-# Ignore low-scoring pairings.
-too_low = []
-for ship, score in ships.items():
-    if score <= 50:
-        too_low.append(ship)
-for ship in too_low:
-    del ships[ship]
+with open("data.pickle", "r+b") as f:
+    ships = pickle.load(f)
 
 G = nx.Graph()
 
 print("\nPairings detected:")
 for ship in ships.keys():
-
-    G.add_node(ship, weight=ships[ship])
-    print("{}/{}: {}".format(ship[0], ship[1], ships[ship]))
+    if ships[ship]['total'] < COUNT_CUTOFF:
+        continue
+    G.add_node(ship, weight=ships[ship][SCORE_KEY])
+    print("{}/{}: {}".format(ship[0], ship[1], ships[ship][SCORE_KEY]))
 
 print("Total pairings:", nx.number_of_nodes(G), end="\n\n")
 
 for ship in ships.keys():
     for partner in ship:
         for potential_link in ships.keys():
+            if ships[potential_link]['total'] < COUNT_CUTOFF:
+                continue
             if ship == potential_link:
                 continue
             if partner in potential_link:
@@ -65,20 +60,20 @@ highest = None
 highest_score = 0
 
 print("\nSearching for solutions...")
-for i in range(1, 500):
+for i in range(LOOPS):
     version = dnx.maximum_weighted_independent_set(G, weight='weight')
-    score = sum([ships[ship] for ship in version])
+    score = sum([ships[ship][SCORE_KEY] for ship in version])
     print(score)
     if score > highest_score:
         highest_score = score
         highest = version
 
-fleet = {ship: ships[ship] for ship in highest}
+fleet = {ship: ships[ship][SCORE_KEY] for ship in highest}
 
-print("\n```\nHighest scoring fleet:")
+print("\n```\nHighest scoring fleet:\n")
 for ship in sorted(fleet.items(), key=operator.itemgetter(1), reverse=True):
     ship, score = ship
-    print("{0: <4} - {1} / {2}".format(score, ship[0], ship[1]))
+    print("{:<9.4f} - {} / {}".format(score, ship[0], ship[1]))
 
 print("\nTotal fleet score:", highest_score)
 print("```")
