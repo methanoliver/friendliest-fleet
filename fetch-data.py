@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Using our original spreadsheet of Derpibooru tag data, inquire in Derpibooru
+Using our spreadsheet of Derpibooru tag data, inquire in Derpibooru
 API about tag and image metadata and save the results to data.pickle,
 precomputing some values.
 """
@@ -30,7 +30,7 @@ if config.get('proxies'):
 # Set up backoff factors and retries: I've had a round of data collection
 # that got aborted because the API was a bit flaky and didn't respond.
 retries = Retry(
-    total=None,
+    total=5,
     connect=5,
     read=5,
     status=0,
@@ -61,13 +61,14 @@ def lookup_score(tag):
     wilson = 0
     date = today
     while True:
-        time.sleep(1)  # So as not to hammer Derpibooru with requests.
+        time.sleep(0.5)  # So as not to hammer Derpibooru with requests.
         r = s.get(url, params=payload)
         print("API:", r.url)
         # If the status code isn't 200, we should fail with an exception anyway...
         data = r.json()
         total = max(total, data.get('total', 0))
         images = data.get('search', [])
+        # If we're past the end of the list, we're done.
         if not len(images):
             break
         for image in data.get('search', []):
@@ -76,6 +77,10 @@ def lookup_score(tag):
             image_date = image.get('first_seen_at')
             if image_date:
                 date = min(date, arrow.get(image_date).datetime)
+        # If we're on the last page, we don't have to fetch again
+        # to be sure we are.
+        if len(images) < 50:
+            break
         payload['page'] += 1
 
     return upvotes, wilson, date, total
@@ -92,7 +97,7 @@ today = datetime.datetime.now(tz=pytz.utc)
 # from a CSV file, which was written by manually investigating the tags.
 # As such, it can contain typos, which were a problem at some point.
 
-with open('Most Satisfactory Fleet - Sheet1.csv', "r") as f:
+with open('automated-ship-registry.csv', "r") as f:
     reader = csv.DictReader(f)
     for row in reader:
         char_a = row['Character A'].strip()
@@ -106,7 +111,7 @@ for x in sorted(names):
     print(x)
 
 # Now actually proceeding with the API requests.
-with open('Most Satisfactory Fleet - Sheet1.csv', "r") as f:
+with open('automated-ship-registry.csv', "r") as f:
     reader = csv.DictReader(f)
     for row in reader:
         # Avoid duplicates in case any are left in the initial data.
@@ -137,9 +142,14 @@ with open('Most Satisfactory Fleet - Sheet1.csv', "r") as f:
 
 for k, v in ships.items():
     timespan = (today - v['date']).days
-    v['upvotes_per_day'] = v['upvotes'] / timespan
-    v['wilson_per_day'] = v['wilson'] / timespan
-    v['amount_per_day'] = v['total'] / timespan
+    if timespan:  # It can be zero if a shipping tag is actually empty.
+        v['upvotes_per_day'] = v['upvotes'] / timespan
+        v['wilson_per_day'] = v['wilson'] / timespan
+        v['amount_per_day'] = v['total'] / timespan
+    else:
+        v['upvotes_per_day'] = 0
+        v['wilson_per_day'] = 0
+        v['amount_per_day'] = 0
 
 with open("data.pickle", "w+b") as f:
     pickle.dump(ships, f)

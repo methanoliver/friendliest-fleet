@@ -1,7 +1,9 @@
-# Proxies. If you don't use a proxy to access Derpibooru (I do) you can delete those.
+# Proxies. If you don't use a proxy to access Derpibooru (I do) you can delete
+# the entire section.
 proxies:
   http: socks5h://host:port
   https: socks5h://host:port
 # Your Derpibooru API key. Find it at https://derpibooru.org/users/edit
-# Don't forget to turn of filters before fetching data, or you will get wildly skewed results.
+# Don't forget to turn of filters before fetching data, or you will get wildly
+# skewed results.
 key: xxxxxxxxxxxxxxxxxxxxxx

@@ -29,15 +29,22 @@ COUNT_CUTOFF = 50
 # Only the highest scoring result will be reported.
 LOOPS = 500
 
-with open("data.pickle", "r+b") as f:
+with open("data-filtered.pickle", "r+b") as f:
     ships = pickle.load(f)
 
 G = nx.Graph()
 
-print("\nPairings detected:")
+# Pre-filter the ships for cutoff.
+inconsequential = set()
 for ship in ships.keys():
     if ships[ship]['total'] < COUNT_CUTOFF:
-        continue
+        inconsequential.add(ship)
+
+for ship in inconsequential:
+    del ships[ship]
+
+print("\nPairings detected:")
+for ship in ships.keys():
     G.add_node(ship, weight=ships[ship][SCORE_KEY])
     print("{}/{}: {}".format(ship[0], ship[1], ships[ship][SCORE_KEY]))
 
@@ -46,8 +53,6 @@ print("Total pairings:", nx.number_of_nodes(G), end="\n\n")
 for ship in ships.keys():
     for partner in ship:
         for potential_link in ships.keys():
-            if ships[potential_link]['total'] < COUNT_CUTOFF:
-                continue
             if ship == potential_link:
                 continue
             if partner in potential_link:

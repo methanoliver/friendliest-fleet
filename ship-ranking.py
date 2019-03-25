@@ -10,7 +10,7 @@ import csv
 
 SCORE_KEY = 'upvotes_per_day'
 
-with open("data.pickle", "r+b") as f:
+with open("data-filtered.pickle", "r+b") as f:
     ships = pickle.load(f)
 
 print("```")
@@ -31,7 +31,9 @@ with open("time-weighted-ranking.csv", "w") as f:
     for ship in sorted(
             ships.items(), key=lambda x: x[1][SCORE_KEY], reverse=True):
         ship, data = ship
-        print("{:<9.4f} - {} / {}".format(data[SCORE_KEY], ship[0], ship[1]))
+        if data[SCORE_KEY] > 1.0:
+            print("{:<9.4f} - {} / {}".format(data[SCORE_KEY], ship[0],
+                                              ship[1]))
         writer.writerow({
             "Character A": ship[0],
             "Character B": ship[1],
