@@ -8,7 +8,7 @@ import pickle
 import operator
 import csv
 
-SCORE_KEY = 'upvotes_per_day'
+SCORE_KEY = 'artists_per_day'
 
 with open("data-filtered.pickle", "r+b") as f:
     ships = pickle.load(f)
@@ -22,18 +22,21 @@ with open("time-weighted-ranking.csv", "w") as f:
         "Image count",
         "Earliest appearance",
         "Total upvotes",
+        "Distinct artists",
         "Upvotes per day",
         "Total Wilson score",
         "Wilson per day",
         "Images per day",
+        "Artists per day",
     ])
     writer.writeheader()
     for ship in sorted(
             ships.items(), key=lambda x: x[1][SCORE_KEY], reverse=True):
         ship, data = ship
-        if data[SCORE_KEY] > 1.0:
+        if data[SCORE_KEY] > 0.0:
             print("{:<9.4f} - {} / {}".format(data[SCORE_KEY], ship[0],
                                               ship[1]))
+        artist_count = len(data.get('artists', []))
         writer.writerow({
             "Character A": ship[0],
             "Character B": ship[1],
@@ -44,6 +47,8 @@ with open("time-weighted-ranking.csv", "w") as f:
             "Total Wilson score": data.get('wilson', 0),
             "Wilson per day": data.get('wilson_per_day', 0),
             "Images per day": data.get('amount_per_day', 0),
+            "Distinct artists": artist_count,
+            "Artists per day": data.get('artists_per_day', 0),
         })
 
 print("```")

@@ -1,21 +1,17 @@
 #!/usr/bin/env python3
 """
-Using our spreadsheet of Derpibooru tag data, inquire in Derpibooru
-API about tag and image metadata and save the results to data.pickle,
-precomputing some values.
+Using our spreadsheet of Derpibooru tag data, inquire in Derpibooru API about
+the tag and image metadata and save everything we get to raw-data.pickle
 """
 
 import csv
 import requests
 import yaml
-import json
-import sys
 import datetime
 import pytz
-import sys
 import time
-import arrow
 import pickle
+from collections import defaultdict
 from requests.packages.urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
@@ -42,10 +38,8 @@ s.mount('https://', HTTPAdapter(max_retries=retries))
 
 def lookup_score(tag):
     """
-    Lookup image metadata in Derpibooru API and compute scores a given tag
-    has.  This is done by simply requesting the entirety of the image search
-    for this tag, and going through all the image information packets returned
-    until they are exhausted.
+    Lookup image metadata in Derpibooru API and return a dict of all images for
+    a given tag keyed by image id.
     """
 
     url = "https://derpibooru.org/search.json"
@@ -56,37 +50,28 @@ def lookup_score(tag):
         "q": tag,
     }
 
-    total = 0
-    upvotes = 0
-    wilson = 0
-    date = today
+    all_images = dict()
     while True:
         time.sleep(0.5)  # So as not to hammer Derpibooru with requests.
         r = s.get(url, params=payload)
         print("API:", r.url)
         # If the status code isn't 200, we should fail with an exception anyway...
         data = r.json()
-        total = max(total, data.get('total', 0))
         images = data.get('search', [])
-        # If we're past the end of the list, we're done.
-        if not len(images):
+
+        for image in images:
+            all_images[image['id']] = image
+
+        # If we're past the end of the list, or this is the last page, we're done.
+        if not len(images) or len(images) < 50:
             break
-        for image in data.get('search', []):
-            upvotes += image.get('upvotes')
-            wilson += image.get('score')
-            image_date = image.get('first_seen_at')
-            if image_date:
-                date = min(date, arrow.get(image_date).datetime)
-        # If we're on the last page, we don't have to fetch again
-        # to be sure we are.
-        if len(images) < 50:
-            break
+
         payload['page'] += 1
 
-    return upvotes, wilson, date, total
+    return all_images
 
 
-ships = dict()
+ships = defaultdict(dict)
 tags = set()
 names = set()
 
@@ -125,33 +110,16 @@ with open('automated-ship-registry.csv', "r") as f:
         char_b = row['Character B'].strip()
         key = tuple(sorted([char_a, char_b]))
 
-        ship_data = ships.get(key, {
-            "upvotes": 0,
-            "wilson": 0,
-            "date": today,
-            "total": 0,
-        })
+        # Multiple shipping tags pointing at the same pairing
+        # get the image dicts they return merged.
+        ships[key] = {**ships[key], **lookup_score(main_tag)}
 
-        upvotes, wilson, date, total, = lookup_score(main_tag)
-        ship_data['upvotes'] += upvotes
-        ship_data['wilson'] += wilson
-        ship_data['date'] = min(ship_data['date'], date)
-        ship_data['total'] += total
-
-        ships[key] = ship_data
-
-for k, v in ships.items():
-    timespan = (today - v['date']).days
-    if timespan:  # It can be zero if a shipping tag is actually empty.
-        v['upvotes_per_day'] = v['upvotes'] / timespan
-        v['wilson_per_day'] = v['wilson'] / timespan
-        v['amount_per_day'] = v['total'] / timespan
-    else:
-        v['upvotes_per_day'] = 0
-        v['wilson_per_day'] = 0
-        v['amount_per_day'] = 0
-
-with open("data.pickle", "w+b") as f:
-    pickle.dump(ships, f)
+# At this point we should have all the image metadata for every ship in memory,
+# with duplicate images resulting from multiple tags pointing at the same ship
+# excised.
+#
+# We're going to save it to process every which way later.
+with open("raw-data.pickle", "w+b") as f:
+    pickle.dump({'ships': ships, 'today': today}, f)
 
 print("Done!")
